@@ -1,0 +1,786 @@
+/* =========================================================
+   BASE RESET & APP SHELL
+   ========================================================= */
+* {
+    box-sizing: border-box;
+}
+
+.stApp {
+    background:
+        radial-gradient(circle at top, rgba(142, 16, 16, 0.16), transparent 22%),
+        linear-gradient(180deg, #04070b 0%, #010204 52%, #020508 100%);
+    color: #f8fafc;
+    overflow-x: hidden;
+}
+
+section.main .block-container {
+    padding-top: 1.15rem;
+    padding-bottom: 1.5rem;
+}
+
+/* =========================================================
+   SIDEBAR — SHELL & WIDGETS
+   ========================================================= */
+section[data-testid="stSidebar"] {
+    background: linear-gradient(180deg, #040608 0%, #020406 100%);
+    border-right: 1px solid rgba(255, 255, 255, 0.08);
+    padding: 0.9rem 0.65rem;
+}
+
+section[data-testid="stSidebar"]::before {
+    content: "";
+    display: block;
+    height: 3px;
+    margin: 0 0 0.9rem 0;
+    border-radius: 999px;
+    background: linear-gradient(90deg, #e10600, #7f0000);
+}
+
+section[data-testid="stSidebar"] * {
+    color: #f8fafc;
+}
+
+section[data-testid="stSidebar"] h1,
+section[data-testid="stSidebar"] h2,
+section[data-testid="stSidebar"] h3 {
+    margin: 0;
+    color: #fff;
+    font-size: 1.08rem;
+    font-weight: 800;
+}
+
+section[data-testid="stSidebar"] p {
+    margin: 0.18rem 0 0.55rem 0;
+    color: #d1d5db;
+    line-height: 1.25;
+}
+
+section[data-testid="stSidebar"] .stButton > button {
+    width: 100%;
+    border-radius: 999px;
+    border: 1px solid rgba(255, 255, 255, 0.16);
+    background: linear-gradient(180deg, #b31d1d 0%, #7f0000 100%);
+    color: #fff;
+    font-weight: 700;
+    padding: 0.6rem 0.75rem;
+    box-shadow: 0 10px 24px rgba(225, 6, 0, 0.22);
+}
+
+section[data-testid="stSidebar"] .stButton > button:hover {
+    background: linear-gradient(180deg, #d82323 0%, #9c0000 100%);
+    border-color: rgba(255, 255, 255, 0.28);
+}
+
+section[data-testid="stSidebar"] .stRadio > div {
+    padding-top: 0.2rem;
+}
+
+section[data-testid="stSidebar"] .stSelectbox,
+section[data-testid="stSidebar"] .stMultiSelect,
+section[data-testid="stSidebar"] .stSlider,
+section[data-testid="stSidebar"] .stNumberInput {
+    margin-bottom: 0.35rem;
+}
+
+/* =========================================================
+   SIDEBAR — UTILITY CLASSES
+   ========================================================= */
+
+/* Horizontal rule between sidebar sections */
+.sidebar-divider {
+    height: 1px;
+    margin: 0.7rem 0;
+    border-radius: 999px;
+    background: linear-gradient(90deg, rgba(225, 6, 0, 0.6), rgba(255, 255, 255, 0.12));
+}
+
+/* All-caps section labels (e.g. "DATA CONFIGURATION", "NAVIGATION") */
+.sidebar-label {
+    font-size: 0.66rem;
+    color: #fda4af;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    margin-bottom: 0.4rem;
+    font-weight: 700;
+}
+
+/* Unused brand classes kept for forward-compat */
+.sidebar-brand {
+    font-size: 1.18rem;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: #ffffff;
+    margin: 0;
+}
+
+.sidebar-brand-subtitle {
+    font-size: 0.67rem;
+    color: #fca5a5;
+    text-transform: uppercase;
+    letter-spacing: 0.18em;
+    margin-top: 0.2rem;
+    margin-bottom: 0.65rem;
+}
+
+.sidebar-brand-caption {
+    font-size: 0.74rem;
+    color: #cbd5e1;
+    line-height: 1.25;
+    margin-bottom: 0.7rem;
+}
+
+/* =========================================================
+   STATUS BADGES  (Analysis loaded / not loaded pill)
+   ========================================================= */
+.status-badge {
+    display: inline-block;
+    padding: 0.24rem 0.55rem;
+    border-radius: 999px;
+    font-size: 0.72rem;
+    font-weight: 700;
+    margin-top: 0.25rem;
+    letter-spacing: 0.04em;
+}
+
+.status-loaded {
+    background: rgba(225, 6, 0, 0.18);
+    border: 1px solid rgba(225, 6, 0, 0.55);
+    color: #fecdd3;
+}
+
+.status-not-loaded {
+    background: rgba(148, 163, 184, 0.16);
+    border: 1px solid rgba(148, 163, 184, 0.38);
+    color: #d1d5db;
+}
+
+/* =========================================================
+   DASHBOARD HERO  (top banner on the main page)
+   ========================================================= */
+.dashboard-hero {
+    padding: 1.2rem 1.25rem 1.05rem 1.25rem;
+    border-radius: 18px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    background: linear-gradient(180deg, rgba(10, 10, 12, 0.96), rgba(6, 7, 10, 0.9));
+    box-shadow: 0 14px 30px rgba(0, 0, 0, 0.32);
+    margin-bottom: 1rem;
+    position: relative;
+    overflow: hidden;
+}
+
+.dashboard-hero::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(120deg, rgba(225, 6, 0, 0.12), transparent 30%);
+    pointer-events: none;
+}
+
+/* Red pill badge: "INSIGHT-FIRST DASHBOARD" */
+.dashboard-hero__eyebrow {
+    display: inline-block;
+    padding: 0.22rem 0.55rem;
+    border-radius: 999px;
+    background: rgba(225, 6, 0, 0.18);
+    color: #fda4af;
+    font-size: 0.63rem;
+    font-weight: 800;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    margin-bottom: 0.66rem;
+    border: 1px solid rgba(225, 6, 0, 0.32);
+}
+
+.dashboard-hero__title {
+    margin: 0;
+    font-size: clamp(1.8rem, 4.6vw, 2.25rem);
+    line-height: 1.1;
+    color: #fff;
+    position: relative;
+    z-index: 1;
+    word-break: break-word;
+}
+
+/* Red subtitle line */
+.dashboard-hero__subtitle {
+    margin: 0.35rem 0 0.55rem 0;
+    color: #fca5a5;
+    font-size: 0.96rem;
+    font-weight: 700;
+    position: relative;
+    z-index: 1;
+    line-height: 1.3;
+    word-break: break-word;
+}
+
+.dashboard-hero__description {
+    margin: 0;
+    color: #d1d5db;
+    max-width: 760px;
+    line-height: 1.35;
+    position: relative;
+    z-index: 1;
+    word-break: break-word;
+}
+
+/* Red gradient underline at the bottom of the hero */
+.dashboard-hero__accent {
+    height: 3px;
+    margin-top: 0.9rem;
+    border-radius: 999px;
+    background: linear-gradient(90deg, #e10600, rgba(255, 255, 255, 0.22));
+}
+
+/* =========================================================
+   SECTION TITLE  (used by section_title() helper)
+   ========================================================= */
+.section-title {
+    margin: 0.75rem 0 0.5rem 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.2rem;
+}
+
+.section-title__title {
+    margin: 0;
+    font-size: 1.15rem;
+    font-weight: 800;
+    color: #fff;
+    line-height: 1.2;
+    word-break: break-word;
+}
+
+/* Gray subtitle below section title */
+.section-title__subtitle {
+    margin: 0;
+    color: #b8c0cc;
+    font-size: 0.84rem;
+    line-height: 1.3;
+    word-break: break-word;
+}
+
+/* =========================================================
+   SURFACE NOTE  (info_note / warning_note callout boxes)
+   ========================================================= */
+.surface-note {
+    display: flex;
+    flex-direction: column;
+    gap: 0.28rem;
+    margin: 0.35rem 0 0.8rem 0;
+    padding: 0.82rem 0.9rem;
+    border-radius: 14px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    background: rgba(10, 11, 14, 0.92);
+    border-left: 4px solid #e10600;
+    box-sizing: border-box;
+}
+
+/* Small all-caps label above the note body ("INSIGHT", "WATCH") */
+.surface-note__label {
+    font-size: 0.58rem;
+    font-weight: 800;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: #fda4af;
+}
+
+.surface-note__body {
+    color: #e5e7eb;
+    font-size: 0.9rem;
+    line-height: 1.35;
+    word-break: break-word;
+}
+
+/* Warning variant — amber left border */
+.surface-note--warning {
+    border-left-color: #f59e0b;
+}
+
+.surface-note--warning .surface-note__label {
+    color: #fcd34d;
+}
+
+/* =========================================================
+   F1 SECTION HEADER  (render_section_header())
+   ========================================================= */
+.f1-section-header {
+    margin: 0.4rem 0 0.7rem 0;
+    padding: 0.1rem 0.2rem;
+}
+
+/* Small red all-caps eyebrow ("F1 ANALYTICS") */
+.f1-section-header__eyebrow {
+    display: inline-flex;
+    align-items: center;
+    font-size: 0.6rem;
+    font-weight: 800;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: #fda4af;
+    margin-bottom: 0.28rem;
+}
+
+.f1-section-header__title {
+    font-size: 1.35rem;
+    font-weight: 800;
+    color: #ffffff;
+    margin: 0;
+}
+
+/* Short red gradient underline below the title */
+.f1-section-header__accent {
+    height: 2px;
+    width: 72px;
+    border-radius: 999px;
+    margin-top: 0.45rem;
+    background: linear-gradient(90deg, #e10600, rgba(255, 255, 255, 0.25));
+}
+
+.f1-section-header__description {
+    font-size: 0.78rem;
+    color: #b0b6bf;
+    margin-top: 0.28rem;
+    line-height: 1.3;
+    max-width: 760px;
+}
+
+/* =========================================================
+   F1 CALLOUT  (render_section_guidance() boxes)
+   ========================================================= */
+.f1-callout {
+    margin: 0.35rem 0 0.8rem 0;
+    padding: 0.9rem 0.95rem;
+    border-radius: 14px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    background: rgba(8, 10, 13, 0.88);
+    border-left: 4px solid #e10600;
+}
+
+/* Small red all-caps label ("HOW TO READ THIS SECTION") */
+.f1-callout__eyebrow {
+    font-size: 0.6rem;
+    font-weight: 800;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: #fda4af;
+    margin-bottom: 0.35rem;
+}
+
+.f1-callout__body {
+    color: #e5e7eb;
+    line-height: 1.35;
+    font-size: 0.9rem;
+}
+
+/* =========================================================
+   METRIC CARDS  (render_metric_card())
+   ========================================================= */
+.metric-card {
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-start;
+    align-items: flex-start;
+    min-height: 110px;
+    height: auto;
+    padding: 0.9rem 0.95rem;
+    border-radius: 16px;
+    background: rgba(10, 12, 16, 0.94);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-top: 3px solid #e10600;
+    box-sizing: border-box;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+    line-height: 1.2;
+    margin-bottom: 0.55rem;
+}
+
+/* All-caps red label at the top of each card */
+.metric-card__label {
+    color: #fda4af;
+    font-size: 0.78rem;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.09em;
+    margin-bottom: 0.55rem;
+    line-height: 1.2;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+}
+
+/* Large white numeric / text value */
+.metric-card__value {
+    color: #fff;
+    font-size: 1.6rem;
+    font-weight: 800;
+    line-height: 1.12;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+    margin: 0;
+}
+
+/* Smaller value variant for long strings */
+.metric-card__value--compact {
+    font-size: 1.02rem;
+    line-height: 1.25;
+}
+
+.metric-card__caption {
+    color: #b0b6bf;
+    font-size: 0.71rem;
+    line-height: 1.15;
+    margin-top: 0.45rem;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+}
+
+/* =========================================================
+   STREAMLIT COMPONENT OVERRIDES
+   ========================================================= */
+
+/* Alert / warning / info boxes — red left border, dark bg */
+div[data-testid="stAlert"] {
+    background: rgba(9, 10, 13, 0.92);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-left: 4px solid #e10600;
+    border-radius: 14px;
+    color: #f8fafc;
+}
+
+div[data-testid="stAlert"] p,
+div[data-testid="stAlert"] li,
+div[data-testid="stAlert"] strong {
+    color: #f8fafc;
+}
+
+/* Expander — dark background, rounded corners */
+div[data-testid="stExpander"] > details {
+    border-radius: 14px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    background: rgba(9, 10, 13, 0.94);
+    margin-bottom: 0.6rem;
+    overflow: hidden;
+}
+
+div[data-testid="stExpander"] summary {
+    color: #fff;
+    font-weight: 800;
+    padding: 0.72rem 0.88rem;
+    background: rgba(13, 15, 19, 0.96);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+div[data-testid="stExpander"] summary:hover {
+    background: rgba(17, 19, 24, 0.96);
+}
+
+/* DataFrame wrapper — dark background, rounded corners */
+div[data-testid="stDataFrame"] {
+    border-radius: 14px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    overflow: hidden;
+    background: rgba(7, 9, 12, 0.96);
+}
+
+/* =========================================================
+   EMPTY STATE CARD  (shown before first analysis run)
+   ========================================================= */
+.empty-state-card {
+    max-width: 720px;
+    margin: 2.2rem auto 0 auto;
+    padding: 1rem 1.1rem;
+    border-radius: 10px;
+    border: 1px solid rgba(148, 163, 184, 0.35);
+    background: rgba(30, 41, 59, 0.25);
+    text-align: center;
+    color: #cbd5e1;
+}
+
+/* =========================================================
+   TYPOGRAPHY  (added to externalise font-size rules)
+   ========================================================= */
+
+/* Base body text */
+section.main p,
+section.main li,
+section.main label,
+section.main .stMarkdown {
+    font-size: 15px;
+}
+
+/* Expander body text */
+div[data-testid="stExpander"] p {
+    font-size: 14px;
+}
+
+/* Dataframe cells */
+div[data-testid="stDataFrame"] td,
+div[data-testid="stDataFrame"] th {
+    font-size: 13px;
+}
+
+/* Sidebar section headers */
+section[data-testid="stSidebar"] .stMarkdown p:has(strong) {
+    font-size: 11px;
+    letter-spacing: 1.5px;
+}
+
+/* Section breathing room */
+div[data-testid="stVerticalBlock"] > div {
+    margin-top: 8px;
+}
+
+/* Captions */
+div[data-testid="stCaptionContainer"] p {
+    font-size: 12px;
+}
+
+/* =========================================================
+   SIDEBAR — NAVIGATION & TEXT REFINEMENTS
+   ========================================================= */
+
+/* Navigation radio labels — make them feel like a real nav menu */
+div[data-testid="stSidebar"] .stRadio label {
+    font-size: 15px !important;
+    padding: 6px 0px;
+    display: block;
+    letter-spacing: 0.3px;
+}
+
+/* Sidebar section headers like NAVIGATION, CURRENT SETUP */
+div[data-testid="stSidebar"] .stMarkdown p {
+    font-size: 11px;
+    letter-spacing: 2px;
+    color: #888888;
+    text-transform: uppercase;
+    margin-top: 16px;
+    margin-bottom: 4px;
+}
+
+/* Current setup values — Year: 2025 etc */
+div[data-testid="stSidebar"] p {
+    font-size: 13px;
+    line-height: 1.8;
+    color: #cccccc;
+}
+
+/* Sidebar overall padding */
+section[data-testid="stSidebar"] > div {
+    padding-top: 24px;
+    padding-left: 20px;
+    padding-right: 20px;
+}
+
+/* =========================================================
+   BODY TEXT & CONTENT HIERARCHY
+   ========================================================= */
+
+/* Main content body text */
+section.main p {
+    font-size: 15px !important;
+    line-height: 1.7;
+}
+
+/* Section subheadings */
+section.main h3 {
+    font-size: 18px;
+    margin-top: 24px;
+    margin-bottom: 8px;
+    letter-spacing: 0.2px;
+}
+
+/* Caption text */
+div[data-testid="stCaptionContainer"] p {
+    font-size: 12px !important;
+    color: #888888;
+}
+
+/* Expander labels */
+div[data-testid="stExpander"] summary p {
+    font-size: 14px !important;
+}
+
+/* Expander body text */
+div[data-testid="stExpander"] .stMarkdown p {
+    font-size: 14px !important;
+}
+
+/* Dataframe */
+div[data-testid="stDataFrame"] td,
+div[data-testid="stDataFrame"] th {
+    font-size: 13px !important;
+}
+
+/* =========================================================
+   SECTION BREATHING ROOM
+   ========================================================= */
+
+/* Space between main content blocks */
+div[data-testid="stVerticalBlock"] > div {
+    margin-bottom: 6px;
+}
+
+/* Divider lines more subtle */
+hr {
+    border-color: #2a2a2a !important;
+    margin: 24px 0 !important;
+}
+
+/* =========================================================
+   LAYOUT — BREATHING ROOM & DASHBOARD POLISH
+   ========================================================= */
+
+/* More breathing room in main content area */
+.main .block-container {
+    padding-top: 2rem;
+    padding-left: 3rem;
+    padding-right: 3rem;
+    max-width: 1200px;
+}
+
+/* Sidebar nav items — larger, cleaner */
+div[data-testid="stSidebar"] .stRadio label p {
+    font-size: 16px !important;
+    padding: 8px 0px 8px 4px !important;
+    letter-spacing: 0.2px;
+    transition: color 0.2s ease;
+}
+
+div[data-testid="stSidebar"] .stRadio label:hover p {
+    color: #C8102E !important;
+}
+
+/* Sidebar section headers */
+div[data-testid="stSidebar"] small,
+div[data-testid="stSidebar"] .stMarkdown p {
+    font-size: 10px !important;
+    letter-spacing: 2.5px !important;
+    color: #666666 !important;
+    text-transform: uppercase !important;
+    margin-top: 20px !important;
+    margin-bottom: 6px !important;
+}
+
+/* More space between sidebar items */
+div[data-testid="stSidebar"] .stRadio > div {
+    gap: 4px;
+}
+
+/* Main body text */
+section.main p {
+    font-size: 16px !important;
+    line-height: 1.75 !important;
+}
+
+/* H3 section subheadings */
+section.main h3 {
+    font-size: 20px !important;
+    font-weight: 600 !important;
+    margin-top: 2rem !important;
+    margin-bottom: 0.5rem !important;
+}
+
+/* Expander labels and body */
+div[data-testid="stExpander"] summary p {
+    font-size: 14px !important;
+}
+
+div[data-testid="stExpander"] .stMarkdown p {
+    font-size: 14px !important;
+    line-height: 1.7 !important;
+}
+
+/* Dataframe */
+div[data-testid="stDataFrame"] td,
+div[data-testid="stDataFrame"] th {
+    font-size: 13px !important;
+}
+
+/* Captions */
+div[data-testid="stCaptionContainer"] p {
+    font-size: 12px !important;
+    color: #888888 !important;
+}
+
+/* Card grid spacing */
+div[data-testid="column"] {
+    padding: 0 8px !important;
+}
+
+/* Plotly chart container fade-in */
+div[data-testid="stPlotlyChart"] {
+    animation: fadeInUp 0.6s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@keyframes fadeInUp {
+    from {
+        opacity: 0;
+        transform: translateY(20px) scale(0.98);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
+}
+
+/* Reduce gap after expander */
+div[data-testid="stExpander"] {
+    margin-bottom: -1rem;
+}
+
+/* Dividers */
+hr {
+    border-color: #2a2a2a !important;
+    margin: 2rem 0 !important;
+}
+
+/* Landing page F1 car animation */
+.track-container {
+    position: relative;
+    width: 100%;
+    height: 120px;
+    overflow: hidden;
+    margin-top: 8px;
+    border-top: 2px solid #C8102E;
+}
+
+.f1-car {
+    position: absolute;
+    bottom: 16px;
+    left: -400px;
+    animation: drivePast 3s cubic-bezier(0.4, 0, 0.2, 1) 0.5s forwards;
+}
+
+.speed-lines {
+    position: absolute;
+    bottom: 28px;
+    left: -200px;
+    animation: drivePast 3s cubic-bezier(0.4, 0, 0.2, 1) 0.5s forwards;
+    opacity: 0.4;
+}
+
+@keyframes drivePast {
+    0%   { left: -200px; }
+    100% { left: 110%; }
+}
+
+/* Landing page enter button */
+div[data-testid="stButton"] > button {
+    background-color: #C8102E;
+    color: white;
+    font-size: 16px;
+    font-weight: 600;
+    padding: 14px 40px;
+    border: none;
+    border-radius: 4px;
+    letter-spacing: 0.5px;
+    cursor: pointer;
+    transition: background-color 0.2s ease;
+}
+div[data-testid="stButton"] > button:hover {
+    background-color: #a50d25;
+}

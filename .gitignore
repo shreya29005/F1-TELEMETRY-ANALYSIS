@@ -1,0 +1,19 @@
+# FastF1 cache — rebuilds automatically on Cloud, don't commit
+cache/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# Virtual environments (if you used one locally)
+venv/
+.venv/
+env/
+
+# Editor/OS junk
+.vscode/
+.DS_Store
+
+# Env vars / secrets, if you add any later
+.env
