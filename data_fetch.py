@@ -8,7 +8,33 @@ logger = logging.getLogger(__name__)
 
 _CACHE_ENABLED = False
 
+PROCESSED_DIR = "data/processed"
 
+
+def _processed_path(year, grand_prix, session_type):
+    safe_gp = grand_prix.replace(" ", "_")
+    return os.path.join(PROCESSED_DIR, f"{year}_{safe_gp}_{session_type}.parquet")
+
+
+def _load_processed_telemetry(year, grand_prix, session_type):
+    if not os.path.exists(PROCESSED_DIR):
+        return None
+    gp_key = grand_prix.lower().replace(" ", "_").replace("grand_prix", "").strip("_")
+    for fname in os.listdir(PROCESSED_DIR):
+        if not fname.endswith(".parquet"):
+            continue
+        stem = fname[:-len(".parquet")]
+        try:
+            file_year_str, rest = stem.split("_", 1)
+            file_event_slug, file_session_type = rest.rsplit("_", 1)
+        except ValueError:
+            continue
+        if int(file_year_str) != year or file_session_type != session_type:
+            continue
+        file_gp_key = file_event_slug.lower().replace("grand_prix", "").strip("_")
+        if gp_key in file_gp_key or file_gp_key in gp_key:
+            return pd.read_parquet(os.path.join(PROCESSED_DIR, fname))
+    return None
 def enable_fastf1_cache(cache_dir="cache"):
     global _CACHE_ENABLED
     if _CACHE_ENABLED:
@@ -17,7 +43,7 @@ def enable_fastf1_cache(cache_dir="cache"):
         os.makedirs(cache_dir)
     fastf1.Cache.enable_cache(cache_dir)
     _CACHE_ENABLED = True
-
+enable_fastf1_cache() 
 
 def fetch_session(year, grand_prix, session_type, cache_dir="cache"):
     enable_fastf1_cache(cache_dir=cache_dir)
@@ -49,28 +75,35 @@ def get_driver_fastest_lap_telemetry(session, driver_code):
         return None, "Telemetry unavailable"
     return tel[available_columns].copy(), None
 
-
 def fetch_driver_telemetry(year, grand_prix, session_type, driver_codes, cache_dir="cache"):
+    processed = _load_processed_telemetry(year, grand_prix, session_type)
+    if processed is not None:
+        telemetry_data = {}
+        skipped_drivers = []
+        for driver_code in driver_codes:
+            driver_rows = processed[(processed["Driver"] == driver_code) & (processed["LapRank"] == 1)]
+            if driver_rows.empty:
+                skipped_drivers.append({
+                    "Driver": driver_code,
+                    "Reason": "Telemetry unavailable",
+                    "Grand Prix": grand_prix,
+                    "Session": session_type,
+                })
+                continue
+            telemetry_data[driver_code] = driver_rows[["Distance", "Speed", "Throttle", "Brake", "RPM"]].reset_index(drop=True)
+        return telemetry_data, skipped_drivers
+
+    # fallback: live fetch (works locally; will fail on Cloud if this session wasn't pre-exported)
     session = fetch_session(year, grand_prix, session_type, cache_dir=cache_dir)
     telemetry_data = {}
     skipped_drivers = []
-
     for driver_code in driver_codes:
         tel, skip_reason = get_driver_fastest_lap_telemetry(session, driver_code)
         if tel is None:
-            skipped_drivers.append(
-                {
-                    "Driver": driver_code,
-                    "Reason": skip_reason or "Telemetry unavailable",
-                    "Grand Prix": grand_prix,
-                    "Session": session_type,
-                }
-            )
+            skipped_drivers.append({"Driver": driver_code, "Reason": skip_reason or "Telemetry unavailable", "Grand Prix": grand_prix, "Session": session_type})
             continue
         telemetry_data[driver_code] = tel
-
     return telemetry_data, skipped_drivers
-
 
 def get_driver_top5_laps_telemetry(session, driver_code):
     """Return list of (lap_number, lap_time_sec, tel_df) for up to 5 fastest valid laps."""
@@ -121,7 +154,25 @@ def get_driver_top5_laps_telemetry(session, driver_code):
 
 
 def fetch_driver_top5_telemetry(year, grand_prix, session_type, driver_codes, cache_dir="cache"):
-    """Fetch top-5-laps telemetry for all drivers from a single session load."""
+    processed = _load_processed_telemetry(year, grand_prix, session_type)
+    if processed is not None:
+        top5_data = {}
+        skipped = []
+        for driver_code in driver_codes:
+            driver_rows = processed[processed["Driver"] == driver_code]
+            if driver_rows.empty:
+                skipped.append({"Driver": driver_code, "Reason": "No valid laps"})
+                continue
+            laps = []
+            for lap_rank, group in driver_rows.groupby("LapRank"):
+                lap_number = int(group["LapNumber"].iloc[0])
+                lap_time_sec = float(group["LapTime_sec"].iloc[0])
+                tel = group[["Distance", "Speed", "Throttle", "Brake", "RPM"]].reset_index(drop=True)
+                laps.append((lap_number, lap_time_sec, tel))
+            top5_data[driver_code] = laps
+        return top5_data, skipped
+
+    # fallback: live fetch
     session = fetch_session(year, grand_prix, session_type, cache_dir=cache_dir)
     top5_data = {}
     skipped = []
