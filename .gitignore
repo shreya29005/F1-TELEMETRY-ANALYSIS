@@ -17,3 +17,5 @@ env/
 
 # Env vars / secrets, if you add any later
 .env
+export_sessions.py
+fetch_all_cache.py
