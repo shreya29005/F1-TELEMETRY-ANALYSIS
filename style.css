@@ -887,3 +887,188 @@ div[data-testid="stDownloadButton"] button {
 div[data-testid="stDownloadButton"] button:hover {
     background-color: #a50d25;
 }
+
+/* =========================================================
+   PODIUM — TOP 3 DRIVERS  (render_driver_podium())
+   ========================================================= */
+.podium-wrapper {
+    margin: 0.4rem 0 0.9rem 0;
+}
+
+.podium-header {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 0.4rem;
+    margin-bottom: 0.85rem;
+}
+
+.podium-header__title {
+    font-size: 1rem;
+    font-weight: 800;
+    color: #f8fafc;
+    letter-spacing: 0.02em;
+}
+
+.podium-header__metric {
+    font-size: 0.74rem;
+    color: #b8c0cc;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+}
+
+.podium-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    align-items: end;
+    gap: 0.75rem;
+}
+
+.podium-place {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-end;
+    min-width: 0;
+    padding: 0.85rem 0.7rem 0 0.7rem;
+    border-radius: 14px 14px 0 0;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-bottom: none;
+    background: rgba(10, 12, 16, 0.85);
+    text-align: center;
+}
+
+.podium-rank {
+    font-size: 0.7rem;
+    font-weight: 800;
+    letter-spacing: 0.1em;
+    color: #b8c0cc;
+    text-transform: uppercase;
+}
+
+.podium-driver {
+    font-size: 1.15rem;
+    font-weight: 800;
+    color: #f8fafc;
+    margin-top: 0.2rem;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+}
+
+.podium-value {
+    font-size: 0.86rem;
+    color: #b8c0cc;
+    margin-top: 0.15rem;
+    margin-bottom: 0.7rem;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+}
+
+.podium-leader-badge {
+    display: inline-block;
+    padding: 0.16rem 0.5rem;
+    margin-bottom: 0.6rem;
+    border-radius: 999px;
+    background: rgba(200, 16, 46, 0.2);
+    border: 1px solid rgba(200, 16, 46, 0.55);
+    color: #fda4af;
+    font-size: 0.62rem;
+    font-weight: 800;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+}
+
+.podium-block {
+    width: 100%;
+    border-radius: 10px 10px 0 0;
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.02));
+}
+
+/* Second place — shorter block, muted emphasis */
+.podium-place--second {
+    opacity: 0.92;
+}
+
+.podium-place--second .podium-block {
+    height: 62px;
+}
+
+/* Third place — shortest block, most muted */
+.podium-place--third {
+    opacity: 0.85;
+}
+
+.podium-place--third .podium-block {
+    height: 44px;
+}
+
+/* First place — tallest block, strongest border and shadow */
+.podium-place--first {
+    border-color: rgba(200, 16, 46, 0.55);
+    background: rgba(14, 10, 11, 0.92);
+    box-shadow: 0 -6px 22px rgba(200, 16, 46, 0.22);
+    padding-top: 1rem;
+}
+
+.podium-place--first .podium-driver {
+    font-size: 1.4rem;
+}
+
+.podium-place--first .podium-block {
+    height: 92px;
+    background: linear-gradient(180deg, rgba(200, 16, 46, 0.32), rgba(200, 16, 46, 0.08));
+}
+
+/* Responsive — stack podium vertically on narrow screens,
+   ranked top to bottom, no horizontal overflow */
+@media (max-width: 640px) {
+    .podium-grid {
+        grid-template-columns: minmax(0, 1fr);
+        gap: 0.6rem;
+    }
+
+    .podium-place {
+        order: 2;
+        flex-direction: row;
+        align-items: center;
+        justify-content: flex-start;
+        text-align: left;
+        border-radius: 12px;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+        padding: 0.7rem 0.85rem;
+        gap: 0.7rem;
+    }
+
+    .podium-place--first {
+        order: 1;
+    }
+
+    .podium-place--third {
+        order: 3;
+    }
+
+    .podium-rank {
+        flex-shrink: 0;
+    }
+
+    .podium-driver,
+    .podium-value {
+        margin: 0;
+    }
+
+    .podium-driver {
+        flex: 1;
+        text-align: left;
+    }
+
+    .podium-leader-badge {
+        margin: 0;
+        flex-shrink: 0;
+    }
+
+    .podium-block {
+        display: none;
+    }
+}

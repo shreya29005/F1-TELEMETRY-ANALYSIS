@@ -80,6 +80,20 @@ CONSISTENCY_METRICS = [
     "Speed_Loss",
     "Throttle_Commitment_Index",
 ]
+PODIUM_METRICS = {
+    "Corner Aggression": "Corner_Aggression_Score",
+    "Apex Speed": "Apex_Speed",
+    "Throttle Commitment": "Throttle_Commitment_Index",
+    "Smoothness": "Smoothness_Index",
+    "Speed Recovery": "Speed_Recovery",
+}
+PODIUM_METRIC_UNITS = {
+    "Corner_Aggression_Score": "score",
+    "Apex_Speed": "km/h",
+    "Throttle_Commitment_Index": "%",
+    "Smoothness_Index": "index",
+    "Speed_Recovery": "km/h",
+}
 
 def render_landing_page():
     try:
@@ -1821,6 +1835,72 @@ def render_section_header(title, description):
     )
 
 
+def format_podium_metric_value(metric, value):
+    try:
+        numeric_value = float(value)
+    except (TypeError, ValueError):
+        return "N/A"
+    if pd.isna(numeric_value):
+        return "N/A"
+    unit = PODIUM_METRIC_UNITS.get(metric, "")
+    formatted = f"{numeric_value:.1f}"
+    return f"{formatted} {unit}".strip()
+
+
+def render_driver_podium(driver_profile_df, metric="Corner_Aggression_Score", title="Top 3 Drivers"):
+    if not isinstance(driver_profile_df, pd.DataFrame) or driver_profile_df.empty:
+        st.info("Run Micro-Sector Analysis to populate the driver podium.")
+        return
+
+    if "Driver" not in driver_profile_df.columns or metric not in driver_profile_df.columns:
+        st.info("The selected ranking metric is not available for the current analysis.")
+        return
+
+    podium_df = driver_profile_df[["Driver", metric]].copy()
+    podium_df[metric] = pd.to_numeric(podium_df[metric], errors="coerce")
+    podium_df = podium_df.dropna(subset=[metric])
+    podium_df = podium_df.sort_values(metric, ascending=False).reset_index(drop=True)
+
+    if len(podium_df) < 3:
+        st.info(
+            f"At least three drivers with a valid {prettify_label(metric)} value are needed to render a podium. "
+            f"Currently {len(podium_df)} driver(s) qualify — widen the driver selection or choose another metric."
+        )
+        return
+
+    top_three = podium_df.head(3).to_dict("records")
+    first_entry, second_entry, third_entry = top_three[0], top_three[1], top_three[2]
+
+    def render_place(rank, place_modifier, entry, is_leader=False):
+        driver_code = html.escape(str(entry["Driver"]))
+        value_display = html.escape(format_podium_metric_value(metric, entry[metric]))
+        leader_badge = '<div class="podium-leader-badge">Leader</div>' if is_leader else ""
+        return f"""
+            <div class="podium-place {place_modifier}">
+                <div class="podium-rank">{rank}</div>
+                <div class="podium-driver">{driver_code}</div>
+                <div class="podium-value">{value_display}</div>
+                {leader_badge}
+                <div class="podium-block"></div>
+            </div>
+        """
+
+    podium_html = f"""
+    <div class="podium-wrapper">
+        <div class="podium-header">
+            <span class="podium-header__title">{html.escape(title)}</span>
+            <span class="podium-header__metric">Ranked by {html.escape(prettify_label(metric))}</span>
+        </div>
+        <div class="podium-grid">
+            {render_place(2, "podium-place--second", second_entry)}
+            {render_place(1, "podium-place--first", first_entry, is_leader=True)}
+            {render_place(3, "podium-place--third", third_entry)}
+        </div>
+    </div>
+    """
+    st.markdown(podium_html, unsafe_allow_html=True)
+
+
 def render_overview(df, analysis_config, skipped_drivers, last_load_time_sec):
     render_section_header(
         "Overview",
@@ -1889,6 +1969,32 @@ def render_overview(df, analysis_config, skipped_drivers, last_load_time_sec):
         st.warning(
             "This micro-sector looks weak for style separation. Braking and speed-loss variation are low, so interpret the summary cautiously."
         )
+
+    st.markdown("**Top 3 drivers**")
+    podium_metric_labels = list(PODIUM_METRICS.keys())
+    selector_col, _ = st.columns([1, 2])
+    with selector_col:
+        podium_metric_label = st.selectbox(
+            "Ranking metric",
+            options=podium_metric_labels,
+            index=podium_metric_labels.index("Corner Aggression"),
+            key="overview_podium_metric_label",
+            help="Choose the metric used to rank the top 3 drivers in the podium below.",
+        )
+    podium_metric = PODIUM_METRICS[podium_metric_label]
+
+    try:
+        podium_driver_profile_df = aggregate_driver_profiles(df)
+    except ValueError:
+        podium_driver_profile_df = None
+    else:
+        st.session_state["driver_profile_df"] = podium_driver_profile_df
+
+    render_driver_podium(podium_driver_profile_df, metric=podium_metric, title="Top 3 Drivers")
+    info_note(
+        "The podium ranks drivers only within the selected telemetry window and metric. "
+        "It represents segment-specific driving behavior, not an overall assessment of driver performance."
+    )
 
     st.markdown("**Detailed diagnostics**")
     diagnostic_rows = [
