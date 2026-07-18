@@ -784,3 +784,106 @@ div[data-testid="stButton"] > button {
 div[data-testid="stButton"] > button:hover {
     background-color: #a50d25;
 }
+
+/* =========================================================
+   NATIVE WIDGET DARK-MODE HARDENING
+   Keeps select/multiselect/number/slider/radio/tabs controls —
+   plus BaseWeb dropdown portals rendered outside the app tree —
+   on the dark palette regardless of the viewer's OS/browser theme.
+   ========================================================= */
+
+/* Select & multiselect control shell, number input box */
+div[data-baseweb="select"] > div,
+div[data-testid="stNumberInput"] input {
+    background-color: #0a0c10 !important;
+    border-color: rgba(255, 255, 255, 0.16) !important;
+    color: #f8fafc !important;
+}
+
+/* Multiselect selected tags (chips) */
+span[data-baseweb="tag"] {
+    background-color: rgba(200, 16, 46, 0.28) !important;
+    border: 1px solid rgba(200, 16, 46, 0.55) !important;
+    color: #f8fafc !important;
+}
+
+span[data-baseweb="tag"] span {
+    color: #f8fafc !important;
+}
+
+span[data-baseweb="tag"] svg {
+    fill: #f8fafc !important;
+}
+
+/* Dropdown / listbox portal — BaseWeb renders this at the end of
+   <body>, outside the sidebar, so it needs its own dark styling */
+div[data-baseweb="popover"] ul[role="listbox"],
+div[data-baseweb="popover"] div[data-baseweb="menu"] {
+    background-color: #0a0c10 !important;
+    border: 1px solid rgba(255, 255, 255, 0.14);
+}
+
+div[data-baseweb="popover"] li[role="option"] {
+    background-color: transparent !important;
+    color: #f8fafc !important;
+}
+
+div[data-baseweb="popover"] li[role="option"]:hover,
+div[data-baseweb="popover"] li[aria-selected="true"] {
+    background-color: rgba(200, 16, 46, 0.24) !important;
+    color: #ffffff !important;
+}
+
+/* Slider rail, track and thumb */
+div[data-testid="stSlider"] div[data-baseweb="slider"] > div:first-child {
+    background: rgba(255, 255, 255, 0.16) !important;
+}
+
+div[data-testid="stSlider"] div[role="slider"] {
+    background-color: #c8102e !important;
+    border-color: #f8fafc !important;
+}
+
+div[data-testid="stSlider"] div[data-testid="stTickBar"] {
+    color: #b0b6bf;
+}
+
+/* Radio button labels (outside the sidebar-scoped rule) */
+div[data-testid="stRadio"] label p {
+    color: #f8fafc;
+}
+
+/* Widget labels above inputs (e.g. "Select Grand Prix") */
+div[data-testid="stWidgetLabel"] p,
+div[data-testid="stWidgetLabel"] label {
+    color: #f8fafc !important;
+}
+
+/* Tabs */
+div[data-testid="stTabs"] [data-baseweb="tab-list"] {
+    background-color: transparent;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+div[data-testid="stTabs"] button[data-baseweb="tab"] p {
+    color: #b0b6bf;
+}
+
+div[data-testid="stTabs"] button[aria-selected="true"] p {
+    color: #ffffff !important;
+}
+
+div[data-testid="stTabs"] div[data-baseweb="tab-highlight"] {
+    background-color: #c8102e !important;
+}
+
+/* Download button */
+div[data-testid="stDownloadButton"] button {
+    background-color: #c8102e;
+    color: #ffffff;
+    border: 1px solid rgba(255, 255, 255, 0.16);
+}
+
+div[data-testid="stDownloadButton"] button:hover {
+    background-color: #a50d25;
+}

@@ -225,6 +225,17 @@ def load_css(filepath="style.css"):
 def apply_chart_animation(fig):
     fig.update_layout(
         transition=dict(duration=400, easing="cubic-in-out"),
+        template="plotly_dark",
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(0,0,0,0)",
+        font=dict(color="#F8FAFC", family="Arial, Helvetica, sans-serif"),
+        title=dict(font=dict(color="#FFFFFF")),
+        legend=dict(font=dict(color="#F8FAFC")),
+        hoverlabel=dict(
+            bgcolor="#0A0C10",
+            font_color="#F8FAFC",
+            bordercolor="rgba(248, 250, 252, 0.25)",
+        ),
     )
     return fig
 
@@ -2309,8 +2320,8 @@ def render_cluster_visualization(df):
                 text=prettify_label(feature),
                 showarrow=False,
                 font=dict(size=11, color="rgba(220,50,50,0.9)"),
-                bgcolor="white",
-                opacity=0.7,
+                bgcolor="rgba(10, 12, 16, 0.85)",
+                opacity=0.85,
             ))
 
         pca_fig.update_layout(shapes=shapes, annotations=annotations)
