@@ -406,6 +406,7 @@ for key, default in [
     ("missing_feature_columns", []),
     ("cluster_profile_df", None),
     ("driver_profile_df", None),
+    ("clustering_available", False),
     ("lap_mode", "Fastest lap only"),
     ("consistency_raw_df", None),
     ("consistency_summary_df", None),
@@ -644,17 +645,29 @@ def aggregate_driver_profiles(df):
     if not available_profile_feature_columns:
         raise ValueError("No driver aggregation columns are available.")
 
+    numeric_features_df = df[["Driver"] + available_profile_feature_columns].copy()
+    for column in available_profile_feature_columns:
+        numeric_features_df[column] = pd.to_numeric(numeric_features_df[column], errors="coerce")
+
     driver_means = (
-        df.groupby("Driver", as_index=False)[available_profile_feature_columns]
+        numeric_features_df.groupby("Driver", as_index=False)[available_profile_feature_columns]
         .mean()
         .round(2)
     )
     sample_counts = df.groupby("Driver").size().reset_index(name="Sample_Count")
-    most_common_profile = (
-        df.groupby("Driver")["Driving_Profile"]
-        .agg(get_mode_or_unknown)
-        .reset_index(name="Most_Frequent_Driving_Profile")
-    )
+    if "Driving_Profile" in df.columns:
+        most_common_profile = (
+            df.groupby("Driver")["Driving_Profile"]
+            .agg(get_mode_or_unknown)
+            .reset_index(name="Most_Frequent_Driving_Profile")
+        )
+    else:
+        # Clustering has not run yet for this analysis, so no style label
+        # exists. Driver-level descriptive metrics are still valid without it.
+        most_common_profile = pd.DataFrame({
+            "Driver": sample_counts["Driver"],
+            "Most_Frequent_Driving_Profile": "Not clustered",
+        })
 
     driver_profile_df = driver_means.merge(sample_counts, on="Driver", how="left")
     driver_profile_df = driver_profile_df.merge(
@@ -778,7 +791,7 @@ def render_cluster_profiles(df):
     )
 
     if df is None or "Style_Cluster" not in df.columns or "Driving_Profile" not in df.columns:
-        st.info("Run Micro-Sector Analysis to populate cluster profiles.")
+        render_clustering_unavailable_notice()
         return
 
     try:
@@ -1169,7 +1182,7 @@ def render_model_evaluation(df, X_scaled):
     )
 
     if df is None or X_scaled is None or "Style_Cluster" not in df.columns:
-        st.info("Run Micro-Sector Analysis to populate model evaluation details.")
+        render_clustering_unavailable_notice()
         return
 
     used_feature_columns = st.session_state.get("used_feature_columns") or []
@@ -1752,6 +1765,18 @@ def render_braking_zone_finder(telemetry_data):
     )
 
 
+def render_clustering_unavailable_notice():
+    if st.session_state.get("analysis_ready", False):
+        st.info(
+            "Clustering was skipped for the current analysis because the selected number of clusters "
+            "exceeds the available valid driver profiles. Reduce the cluster count or include more "
+            "drivers, then rerun the analysis. Driver-level metrics remain available in Overview and "
+            "Driver Profiles."
+        )
+    else:
+        st.info("Run Micro-Sector Analysis to populate this section.")
+
+
 def render_section_guidance(what_it_tells_you, how_to_read, watch_out_for):
     st.markdown(
         f"""
@@ -1983,12 +2008,14 @@ def render_overview(df, analysis_config, skipped_drivers, last_load_time_sec):
         )
     podium_metric = PODIUM_METRICS[podium_metric_label]
 
-    try:
-        podium_driver_profile_df = aggregate_driver_profiles(df)
-    except ValueError:
-        podium_driver_profile_df = None
-    else:
-        st.session_state["driver_profile_df"] = podium_driver_profile_df
+    podium_driver_profile_df = st.session_state.get("driver_profile_df")
+    if not isinstance(podium_driver_profile_df, pd.DataFrame) or podium_driver_profile_df.empty:
+        try:
+            podium_driver_profile_df = aggregate_driver_profiles(df)
+        except ValueError:
+            podium_driver_profile_df = None
+        else:
+            st.session_state["driver_profile_df"] = podium_driver_profile_df
 
     render_driver_podium(podium_driver_profile_df, metric=podium_metric, title="Top 3 Drivers")
     info_note(
@@ -2262,10 +2289,7 @@ def render_cluster_visualization(df):
     required_columns = {"Apex_Speed", "Braking_Pct", "Driving_Profile"}
     missing_cluster_columns = sorted(required_columns - set(df.columns))
     if missing_cluster_columns:
-        st.warning(
-            "Cluster visualization is unavailable because required columns are missing: "
-            + ", ".join(missing_cluster_columns)
-        )
+        render_clustering_unavailable_notice()
         return
 
     has_sectors = 'Sector_Name' in df.columns
@@ -2917,6 +2941,15 @@ selected_n_clusters = st.sidebar.slider(
     key="n_clusters_config",
 )
 
+_existing_driver_profile_df = st.session_state.get("driver_profile_df")
+if isinstance(_existing_driver_profile_df, pd.DataFrame) and not _existing_driver_profile_df.empty:
+    _valid_profile_count_hint = len(_existing_driver_profile_df)
+    if selected_n_clusters > _valid_profile_count_hint:
+        st.sidebar.warning(
+            f"{selected_n_clusters} clusters were requested, but only "
+            f"{_valid_profile_count_hint} valid driver profiles are available."
+        )
+
 if st.sidebar.button("Run Micro-Sector Analysis", type="primary", use_container_width=True):
     if not selected_drivers_config:
         st.sidebar.warning("Select at least one driver before running analysis.")
@@ -2996,52 +3029,47 @@ if st.sidebar.button("Run Micro-Sector Analysis", type="primary", use_container_
                     # clustering succeeds.
                     st.session_state["telemetry_data"] = telemetry_data
 
-                    sample_count = len(df)
-                    if sample_count < 2:
-                        st.sidebar.error("Not enough valid samples for clustering.")
+                    # ---- Stage 1: driver-profile / descriptive analysis ----
+                    # This stage only needs engineered telemetry features, not a
+                    # successful clustering run. Overview, the podium, driver
+                    # profiles and non-clustering visualisations depend on it.
+                    if df is None or df.empty:
+                        st.sidebar.error("No valid telemetry samples were extracted for the selected configuration.")
                         st.session_state["analysis_ready"] = False
+                        st.session_state["clustering_available"] = False
                     else:
-                        missing_feature_columns = [
-                            column for column in CLUSTER_FEATURE_COLUMNS if column not in df.columns
-                        ]
-                        if missing_feature_columns:
-                            st.sidebar.warning(
-                                "Missing optional clustering features: " + ", ".join(missing_feature_columns)
-                            )
-                        st.session_state["missing_feature_columns"] = missing_feature_columns
-
-                        max_valid_clusters = max(1, sample_count - 1)
-                        requested_n_clusters = int(selected_n_clusters)
-                        if requested_n_clusters >= sample_count:
-                            adjusted_n_clusters = max_valid_clusters
-                            st.sidebar.warning(
-                                f"Requested {requested_n_clusters} clusters, but only {sample_count} samples are available. "
-                                f"Reducing to {adjusted_n_clusters}."
-                            )
-                            requested_n_clusters = adjusted_n_clusters
-                        X_scaled, X_imputed_df, imputer, scaler, used_feature_columns = prepare_ml_features(
-                            df,
-                            CLUSTER_FEATURE_COLUMNS,
-                        )
-                        if X_scaled.shape[0] < 2:
-                            st.sidebar.error("Not enough valid samples for clustering.")
+                        try:
+                            driver_profile_df = aggregate_driver_profiles(df)
+                        except ValueError as exc:
+                            st.sidebar.error(str(exc))
                             st.session_state["analysis_ready"] = False
+                            st.session_state["clustering_available"] = False
                         else:
-                            df, kmeans_model = run_kmeans_clustering(
-                                df,
-                                X_scaled,
-                                requested_n_clusters,
-                            )
+                            missing_feature_columns = [
+                                column for column in CLUSTER_FEATURE_COLUMNS if column not in df.columns
+                            ]
+                            if missing_feature_columns:
+                                st.sidebar.warning(
+                                    "Missing optional clustering features: " + ", ".join(missing_feature_columns)
+                                )
+                            st.session_state["missing_feature_columns"] = missing_feature_columns
+
                             elapsed = time.perf_counter() - start_time
                             st.session_state["df"] = df
+                            st.session_state["driver_profile_df"] = driver_profile_df
                             st.session_state["skipped_drivers"] = skipped_drivers
                             st.session_state["analysis_ready"] = True
                             st.session_state["last_load_time_sec"] = elapsed
-                            st.session_state["X_scaled"] = X_scaled
-                            st.session_state["X_imputed_df"] = X_imputed_df
-                            st.session_state["kmeans_model"] = kmeans_model
-                            st.session_state["used_feature_columns"] = used_feature_columns
-                            st.session_state["analysis_config"]["n_clusters"] = requested_n_clusters
+
+                            # Clear any clustering artifacts from a previous run so
+                            # a skipped clustering stage never leaves stale/mismatched
+                            # model output behind.
+                            st.session_state["X_scaled"] = None
+                            st.session_state["X_imputed_df"] = None
+                            st.session_state["kmeans_model"] = None
+                            st.session_state["used_feature_columns"] = []
+                            st.session_state["clustering_available"] = False
+
                             if selected_lap_mode == "Top 5 laps consistency":
                                 try:
                                     top5_data, top5_skipped = fetch_top5_telemetry_cached(
@@ -3072,6 +3100,52 @@ if st.sidebar.button("Run Micro-Sector Analysis", type="primary", use_container_
                                     st.session_state["consistency_raw_df"] = None
                                     st.session_state["consistency_summary_df"] = None
                                     st.session_state["consistency_skipped_drivers"] = []
+
+                            # ---- Stage 2: clustering ----
+                            # Runs only when enough valid driver profiles exist for
+                            # the requested cluster count. A skip here must not
+                            # discard the driver profiles Stage 1 already computed.
+                            requested_n_clusters = int(selected_n_clusters)
+                            st.session_state["analysis_config"]["n_clusters"] = requested_n_clusters
+                            valid_sample_count = len(driver_profile_df)
+
+                            clustering_skip_message = (
+                                "Driver-level telemetry analysis completed, but clustering was skipped because "
+                                "the selected number of clusters exceeds the available valid driver profiles. "
+                                "Reduce the cluster count or include more drivers."
+                            )
+
+                            if valid_sample_count < requested_n_clusters:
+                                st.sidebar.warning(clustering_skip_message)
+                            else:
+                                try:
+                                    X_scaled, X_imputed_df, imputer, scaler, used_feature_columns = prepare_ml_features(
+                                        df,
+                                        CLUSTER_FEATURE_COLUMNS,
+                                    )
+                                except ValueError as exc:
+                                    st.sidebar.warning(f"Clustering was skipped: {exc}")
+                                else:
+                                    if X_scaled.shape[0] < requested_n_clusters:
+                                        st.sidebar.warning(clustering_skip_message)
+                                    else:
+                                        clustered_df, kmeans_model = run_kmeans_clustering(
+                                            df,
+                                            X_scaled,
+                                            requested_n_clusters,
+                                        )
+                                        st.session_state["df"] = clustered_df
+                                        st.session_state["X_scaled"] = X_scaled
+                                        st.session_state["X_imputed_df"] = X_imputed_df
+                                        st.session_state["kmeans_model"] = kmeans_model
+                                        st.session_state["used_feature_columns"] = used_feature_columns
+                                        st.session_state["clustering_available"] = True
+                                        try:
+                                            st.session_state["driver_profile_df"] = aggregate_driver_profiles(
+                                                clustered_df
+                                            )
+                                        except ValueError:
+                                            pass
             except ValueError as exc:
                 st.sidebar.error(str(exc))
                 if st.session_state.get("analysis_ready", False):
@@ -3083,7 +3157,10 @@ if st.sidebar.button("Run Micro-Sector Analysis", type="primary", use_container_
                     st.sidebar.info("Previous loaded analysis is still displayed.")
 
             if st.session_state.get("analysis_ready", False):
-                st.success("Analysis Complete!")
+                if st.session_state.get("clustering_available", False):
+                    st.success("Analysis Complete!")
+                else:
+                    st.info("Driver-level analysis complete. Clustering was skipped — see the sidebar for details.")
 
 st.sidebar.caption("Load telemetry once, then explore sections.")
 st.sidebar.markdown("---")
