@@ -966,6 +966,18 @@ div[data-testid="stDownloadButton"] button:hover {
     word-break: break-word;
 }
 
+.podium-meta {
+    font-size: 0.78rem;
+    color: #b8c0cc;
+    margin-top: 0.05rem;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+}
+
+.podium-meta:last-of-type {
+    margin-bottom: 0.7rem;
+}
+
 .podium-leader-badge {
     display: inline-block;
     padding: 0.16rem 0.5rem;
@@ -1054,7 +1066,8 @@ div[data-testid="stDownloadButton"] button:hover {
     }
 
     .podium-driver,
-    .podium-value {
+    .podium-value,
+    .podium-meta {
         margin: 0;
     }
 

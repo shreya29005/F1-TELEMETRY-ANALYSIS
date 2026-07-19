@@ -23,6 +23,7 @@ from data_fetch import (
     fetch_driver_top5_telemetry,
     enable_fastf1_cache,
     get_processed_session_metadata,
+    get_official_race_podium,
 )
 from feature_engg import build_feature_dataset, extract_turn_features
 
@@ -99,6 +100,11 @@ PODIUM_METRIC_UNITS = {
     "Throttle_Commitment_Index": "%",
     "Smoothness_Index": "index",
     "Speed_Recovery": "km/h",
+}
+OFFICIAL_RACE_RESULT_KEY = "__official_race_result__"
+PODIUM_OPTIONS = {
+    "Official Race Result": OFFICIAL_RACE_RESULT_KEY,
+    **PODIUM_METRICS,
 }
 
 def render_landing_page():
@@ -481,6 +487,11 @@ def fetch_top5_telemetry_cached(year, grand_prix, session_type, driver_codes_tup
 @st.cache_data(show_spinner=False)
 def get_processed_session_metadata_cached(year, grand_prix, session_type):
     return get_processed_session_metadata(year, grand_prix, session_type)
+
+
+@st.cache_data(show_spinner=False)
+def get_official_race_podium_cached(year, grand_prix):
+    return get_official_race_podium(year, grand_prix)
 
 
 @st.cache_data(show_spinner=False)
@@ -1975,6 +1986,77 @@ def render_driver_podium(driver_profile_df, metric="Corner_Aggression_Score", ti
     st.markdown(podium_html, unsafe_allow_html=True)
 
 
+def render_official_race_podium(race_podium_result, title="Official Race Podium"):
+    podium = (race_podium_result or {}).get("podium") or []
+    if len(podium) < 3:
+        st.info("Official race result is unavailable for this event.")
+        return
+
+    first_entry, second_entry, third_entry = podium[0], podium[1], podium[2]
+
+    def render_place(entry, place_modifier, is_winner=False):
+        driver_code = html.escape(str(entry.get("Driver") or "—"))
+        position = entry.get("Position")
+        rank_label = html.escape(f"P{int(position)}") if position is not None else "P?"
+
+        meta_lines = []
+        driver_name = entry.get("Driver_Name")
+        if driver_name:
+            meta_lines.append(f'<div class="podium-meta">{html.escape(str(driver_name))}</div>')
+        team = entry.get("Team")
+        if team:
+            meta_lines.append(f'<div class="podium-meta">{html.escape(str(team))}</div>')
+        status = entry.get("Status")
+        if status:
+            meta_lines.append(f'<div class="podium-meta">{html.escape(str(status))}</div>')
+        meta_html = "".join(meta_lines)
+
+        badge = '<div class="podium-leader-badge">Race Winner</div>' if is_winner else ""
+
+        return textwrap.dedent(f"""\
+            <div class="podium-place {place_modifier}">
+                <div class="podium-rank">{rank_label}</div>
+                <div class="podium-driver">{driver_code}</div>
+                {meta_html}{badge}<div class="podium-block"></div>
+            </div>
+        """).strip()
+
+    podium_html = textwrap.dedent(f"""\
+        <div class="podium-wrapper">
+            <div class="podium-header">
+                <span class="podium-header__title">{html.escape(title)}</span>
+                <span class="podium-header__metric">Final classified race result</span>
+            </div>
+            <div class="podium-grid">
+                {render_place(second_entry, "podium-place--second")}
+                {render_place(first_entry, "podium-place--first", is_winner=True)}
+                {render_place(third_entry, "podium-place--third")}
+            </div>
+        </div>
+    """).strip()
+    # See render_driver_podium(): fragment indentation is not uniform once
+    # nested dedent() results are spliced in, so flatten every line to column
+    # zero rather than rely on Markdown accepting mixed indentation.
+    podium_html = "\n".join(line.lstrip() for line in podium_html.splitlines())
+    st.markdown(podium_html, unsafe_allow_html=True)
+
+
+def render_official_podium_block(year, grand_prix):
+    """Official race-result podium for (year, grand_prix). Depends only on the
+    committed results dataset — not on telemetry, driver selection, distance
+    window, or clustering — so it can render even when analysis hasn't run.
+    """
+    official_result = get_official_race_podium_cached(year, grand_prix)
+    st.caption(f"{year} {grand_prix} — Final classified race result")
+    render_official_race_podium(official_result, title="Official Race Podium")
+    if official_result.get("available"):
+        st.caption(
+            "This podium shows the official race classification and is independent of the "
+            "selected telemetry drivers and micro-sector."
+        )
+    return official_result
+
+
 def render_overview(df, analysis_config, skipped_drivers, last_load_time_sec):
     render_section_header(
         "Overview",
@@ -2045,89 +2127,101 @@ def render_overview(df, analysis_config, skipped_drivers, last_load_time_sec):
         )
 
     st.markdown("**Top 3 drivers**")
-    podium_metric_labels = list(PODIUM_METRICS.keys())
-    scope_col, selector_col = st.columns([1, 1])
+    podium_option_labels = list(PODIUM_OPTIONS.keys())
+    basis_col, scope_col = st.columns([1, 1])
+    with basis_col:
+        podium_basis_label = st.selectbox(
+            "Podium basis",
+            options=podium_option_labels,
+            index=podium_option_labels.index("Corner Aggression"),
+            key="overview_podium_basis_label",
+            help="Choose the official race result, or a telemetry metric to rank the top 3 drivers below.",
+        )
+    podium_basis_key = PODIUM_OPTIONS[podium_basis_label]
+    is_official_mode = podium_basis_key == OFFICIAL_RACE_RESULT_KEY
+
     with scope_col:
-        podium_scope = st.selectbox(
-            "Podium scope",
-            options=["All available session drivers", "Selected analysis drivers"],
-            index=0,
-            key="overview_podium_scope",
-            help="Rank every driver with telemetry in this session, or only the drivers selected in the sidebar.",
-        )
-    with selector_col:
-        podium_metric_label = st.selectbox(
-            "Ranking metric",
-            options=podium_metric_labels,
-            index=podium_metric_labels.index("Corner Aggression"),
-            key="overview_podium_metric_label",
-            help="Choose the metric used to rank the top 3 drivers in the podium below.",
-        )
-    podium_metric = PODIUM_METRICS[podium_metric_label]
-
-    selected_driver_profile_df = st.session_state.get("driver_profile_df")
-    if not isinstance(selected_driver_profile_df, pd.DataFrame) or selected_driver_profile_df.empty:
-        try:
-            selected_driver_profile_df = aggregate_driver_profiles(df)
-        except ValueError:
-            selected_driver_profile_df = None
+        if is_official_mode:
+            st.caption("Podium scope: full race classification (fixed for official results).")
+            podium_scope = st.session_state.get("overview_podium_scope", "All available session drivers")
         else:
-            st.session_state["driver_profile_df"] = selected_driver_profile_df
+            podium_scope = st.selectbox(
+                "Podium scope",
+                options=["All available session drivers", "Selected analysis drivers"],
+                index=0,
+                key="overview_podium_scope",
+                help="Rank every driver with telemetry in this session, or only the drivers selected in the sidebar.",
+            )
 
-    podium_title = "Top 3 Among Selected Drivers"
-    podium_scope_note = "Rankings compare only the drivers selected in the sidebar."
-    podium_driver_profile_df = selected_driver_profile_df
+    if is_official_mode:
+        render_official_podium_block(analysis_config["year"], analysis_config["grand_prix"])
+    else:
+        podium_metric_label = podium_basis_label
+        podium_metric = podium_basis_key
 
-    if podium_scope == "All available session drivers":
-        full_session_metadata = get_processed_session_metadata_cached(
-            analysis_config["year"], analysis_config["grand_prix"], analysis_config["session_type"]
-        )
-        if not full_session_metadata["available"] or not full_session_metadata["drivers"]:
-            st.info(
-                "Full-session driver data is not available for this configuration. "
-                "Showing the selected-driver podium instead."
+        selected_driver_profile_df = st.session_state.get("driver_profile_df")
+        if not isinstance(selected_driver_profile_df, pd.DataFrame) or selected_driver_profile_df.empty:
+            try:
+                selected_driver_profile_df = aggregate_driver_profiles(df)
+            except ValueError:
+                selected_driver_profile_df = None
+            else:
+                st.session_state["driver_profile_df"] = selected_driver_profile_df
+
+        podium_title = "Top 3 Among Selected Drivers"
+        podium_scope_note = "Rankings compare only the drivers selected in the sidebar."
+        podium_driver_profile_df = selected_driver_profile_df
+
+        if podium_scope == "All available session drivers":
+            full_session_metadata = get_processed_session_metadata_cached(
+                analysis_config["year"], analysis_config["grand_prix"], analysis_config["session_type"]
             )
-        else:
-            full_sector_definitions_tuple = tuple(
-                (
-                    sector.get("Sector_Name", "Selected sector"),
-                    sector.get("Sector_Start"),
-                    sector.get("Sector_End"),
-                )
-                for sector in (analysis_config.get("sector_definitions") or [])
-            )
-            full_session_driver_profile_df = get_full_session_driver_profile_cached(
-                analysis_config["year"],
-                analysis_config["grand_prix"],
-                analysis_config["session_type"],
-                tuple(sorted(full_session_metadata["drivers"])),
-                full_sector_definitions_tuple,
-                analysis_config.get("sector_mode", "Single sector"),
-            )
-            if full_session_driver_profile_df is None or full_session_driver_profile_df.empty:
+            if not full_session_metadata["available"] or not full_session_metadata["drivers"]:
                 st.info(
-                    "Full-session driver profiles could not be built for this configuration. "
+                    "Full-session driver data is not available for this configuration. "
                     "Showing the selected-driver podium instead."
                 )
             else:
-                podium_driver_profile_df = full_session_driver_profile_df
-                podium_title = "Top 3 Drivers — Full Session"
-                podium_scope_note = (
-                    "Rankings compare all drivers with valid telemetry in the selected "
-                    "session and distance window."
+                full_sector_definitions_tuple = tuple(
+                    (
+                        sector.get("Sector_Name", "Selected sector"),
+                        sector.get("Sector_Start"),
+                        sector.get("Sector_End"),
+                    )
+                    for sector in (analysis_config.get("sector_definitions") or [])
                 )
+                full_session_driver_profile_df = get_full_session_driver_profile_cached(
+                    analysis_config["year"],
+                    analysis_config["grand_prix"],
+                    analysis_config["session_type"],
+                    tuple(sorted(full_session_metadata["drivers"])),
+                    full_sector_definitions_tuple,
+                    analysis_config.get("sector_mode", "Single sector"),
+                )
+                if full_session_driver_profile_df is None or full_session_driver_profile_df.empty:
+                    st.info(
+                        "Full-session driver profiles could not be built for this configuration. "
+                        "Showing the selected-driver podium instead."
+                    )
+                else:
+                    podium_driver_profile_df = full_session_driver_profile_df
+                    podium_title = "Top 3 Drivers — Full Session"
+                    podium_scope_note = (
+                        "Rankings compare all drivers with valid telemetry in the selected "
+                        "session and distance window."
+                    )
 
-    session_label = session_display_map.get(analysis_config["session_type"], analysis_config["session_type"])
-    st.caption(
-        f"Metric: {podium_metric_label} | {analysis_config['grand_prix']} {session_label} {analysis_config['year']} | "
-        f"Window: {analysis_config.get('start_distance')}-{analysis_config.get('end_distance')} m"
-    )
-    render_driver_podium(podium_driver_profile_df, metric=podium_metric, title=podium_title)
-    st.caption(podium_scope_note)
-    info_note(
-        "The podium ranks drivers only within the selected telemetry window and metric. "
-        "It represents segment-specific driving behavior, not an overall assessment of driver performance."
-    )
+        session_label = session_display_map.get(analysis_config["session_type"], analysis_config["session_type"])
+        st.caption(
+            f"Metric: {podium_metric_label} | {analysis_config['grand_prix']} {session_label} {analysis_config['year']} | "
+            f"Window: {analysis_config.get('start_distance')}-{analysis_config.get('end_distance')} m"
+        )
+        render_driver_podium(podium_driver_profile_df, metric=podium_metric, title=podium_title)
+        st.caption(podium_scope_note)
+        info_note(
+            "The podium ranks drivers only within the selected telemetry window and metric. "
+            "It represents segment-specific driving behavior, not an overall assessment of driver performance."
+        )
 
     st.markdown("**Detailed diagnostics**")
     diagnostic_rows = [
@@ -3461,6 +3555,13 @@ if st.session_state["analysis_ready"]:
     elif selected_section == "Consistency Analysis":
         render_consistency_analysis()
 else:
+    if st.session_state.get("selected_section") == "Overview":
+        # The official race podium depends only on the results dataset for the
+        # live year/Grand Prix selection, not on telemetry, driver selection,
+        # or a successful analysis run — so it can render before/without one.
+        render_official_podium_block(selected_year, selected_gp)
+        st.markdown("---")
+
     st.markdown(
         """
         <div class="empty-state-card">

@@ -9,6 +9,8 @@ logger = logging.getLogger(__name__)
 _CACHE_ENABLED = False
 
 PROCESSED_DIR = "data/processed"
+RESULTS_DIR = "data/results"
+RESULTS_PATH = os.path.join(RESULTS_DIR, "race_results.parquet")
 
 
 def _processed_path(year, grand_prix, session_type):
@@ -16,10 +18,23 @@ def _processed_path(year, grand_prix, session_type):
     return os.path.join(PROCESSED_DIR, f"{year}_{safe_gp}_{session_type}.parquet")
 
 
+def normalize_gp_key(grand_prix):
+    """Normalize a Grand Prix name/slug to a comparable key, shared by every
+    lookup (telemetry files, session metadata, race results) so a user-facing
+    GP label like "Bahrain" reliably matches a stored event slug like
+    "Bahrain_Grand_Prix".
+    """
+    return str(grand_prix).lower().replace(" ", "_").replace("grand_prix", "").strip("_")
+
+
+def _gp_keys_match(key_a, key_b):
+    return bool(key_a) and bool(key_b) and (key_a in key_b or key_b in key_a)
+
+
 def _find_processed_path(year, grand_prix, session_type):
     if not os.path.exists(PROCESSED_DIR):
         return None
-    gp_key = grand_prix.lower().replace(" ", "_").replace("grand_prix", "").strip("_")
+    gp_key = normalize_gp_key(grand_prix)
     for fname in os.listdir(PROCESSED_DIR):
         if not fname.endswith(".parquet"):
             continue
@@ -31,8 +46,8 @@ def _find_processed_path(year, grand_prix, session_type):
             continue
         if int(file_year_str) != year or file_session_type != session_type:
             continue
-        file_gp_key = file_event_slug.lower().replace("grand_prix", "").strip("_")
-        if gp_key in file_gp_key or file_gp_key in gp_key:
+        file_gp_key = normalize_gp_key(file_event_slug)
+        if _gp_keys_match(gp_key, file_gp_key):
             return os.path.join(PROCESSED_DIR, fname)
     return None
 
@@ -96,6 +111,103 @@ def get_processed_session_metadata(year, grand_prix, session_type):
         "overall_min_distance": float(meta_df["Distance"].min()),
         "overall_max_distance": float(meta_df["Distance"].max()),
         "driver_ranges": driver_ranges,
+    }
+
+
+_EMPTY_RACE_PODIUM = {
+    "available": False,
+    "year": None,
+    "grand_prix": None,
+    "podium": [],
+}
+
+
+def _resolve_finishing_position(row):
+    """Prefer the numeric Position column; fall back to a safely-parsed
+    Classified_Position (e.g. "1", "2") and treat non-numeric classifications
+    (DNF, DSQ, NC, ...) as unranked rather than guessing a position.
+    """
+    position = pd.to_numeric(row.get("Position"), errors="coerce")
+    if pd.notna(position):
+        return float(position)
+    classified = row.get("Classified_Position")
+    if classified is None or (isinstance(classified, float) and pd.isna(classified)):
+        return None
+    try:
+        return float(int(str(classified).strip()))
+    except (TypeError, ValueError):
+        return None
+
+
+def get_official_race_podium(year, grand_prix):
+    """Official top-three classified Race result for a season/Grand Prix,
+    read from the committed results dataset (data/results/race_results.parquet).
+    Never raises — returns a structured "unavailable" result if the dataset is
+    missing, the event isn't found, or fewer than three drivers have a valid
+    classified finishing position.
+    """
+    empty_result = dict(_EMPTY_RACE_PODIUM)
+    empty_result["year"] = year
+    empty_result["grand_prix"] = grand_prix
+
+    if not os.path.exists(RESULTS_PATH):
+        return empty_result
+
+    try:
+        results_df = pd.read_parquet(RESULTS_PATH)
+    except Exception as exc:
+        logger.warning(f"Failed to read race results dataset: {exc}")
+        return empty_result
+
+    if results_df.empty or "Year" not in results_df.columns or "Grand_Prix" not in results_df.columns:
+        return empty_result
+
+    try:
+        target_year = int(year)
+        year_results = results_df[pd.to_numeric(results_df["Year"], errors="coerce") == target_year]
+    except (TypeError, ValueError):
+        return empty_result
+
+    if year_results.empty:
+        return empty_result
+
+    gp_key = normalize_gp_key(grand_prix)
+    matched_event = None
+    for candidate_gp in year_results["Grand_Prix"].dropna().unique():
+        if _gp_keys_match(gp_key, normalize_gp_key(candidate_gp)):
+            matched_event = candidate_gp
+            break
+
+    if matched_event is None:
+        return empty_result
+
+    event_results = year_results[year_results["Grand_Prix"] == matched_event].copy()
+    if event_results.empty:
+        return empty_result
+
+    event_results["_ResolvedPosition"] = event_results.apply(_resolve_finishing_position, axis=1)
+    event_results = event_results.dropna(subset=["_ResolvedPosition"])
+    if len(event_results) < 3:
+        return empty_result
+
+    event_results = event_results.sort_values("_ResolvedPosition").head(3)
+
+    podium = []
+    for _, row in event_results.iterrows():
+        podium.append({
+            "Position": int(row["_ResolvedPosition"]),
+            "Driver": row.get("Driver"),
+            "Driver_Name": row.get("Driver_Name") if pd.notna(row.get("Driver_Name")) else None,
+            "Team": row.get("Team") if pd.notna(row.get("Team")) else None,
+            "Status": row.get("Status") if pd.notna(row.get("Status")) else None,
+            "Points": float(row["Points"]) if pd.notna(row.get("Points")) else None,
+        })
+
+    return {
+        "available": True,
+        "year": target_year,
+        "grand_prix": matched_event,
+        "podium": podium,
     }
 def enable_fastf1_cache(cache_dir="cache"):
     global _CACHE_ENABLED

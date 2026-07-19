@@ -19,3 +19,4 @@ env/
 .env
 export_sessions.py
 fetch_all_cache.py
+export_race_results.py
