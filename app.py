@@ -18,7 +18,12 @@ import logging
 import re
 import textwrap
 import unicodedata
-from data_fetch import fetch_driver_telemetry, fetch_driver_top5_telemetry, enable_fastf1_cache
+from data_fetch import (
+    fetch_driver_telemetry,
+    fetch_driver_top5_telemetry,
+    enable_fastf1_cache,
+    get_processed_session_metadata,
+)
 from feature_engg import build_feature_dataset, extract_turn_features
 
 logger = logging.getLogger(__name__)
@@ -471,6 +476,45 @@ def fetch_top5_telemetry_cached(year, grand_prix, session_type, driver_codes_tup
         driver_codes=driver_codes,
         cache_dir=CACHE_DIR,
     )
+
+
+@st.cache_data(show_spinner=False)
+def get_processed_session_metadata_cached(year, grand_prix, session_type):
+    return get_processed_session_metadata(year, grand_prix, session_type)
+
+
+@st.cache_data(show_spinner=False)
+def get_full_session_driver_profile_cached(
+    year,
+    grand_prix,
+    session_type,
+    drivers_tuple,
+    sector_definitions_tuple,
+    sector_mode,
+):
+    """Driver-profile aggregation covering every driver available in the
+    processed session (not just the manually selected analysis drivers),
+    built via the same cached telemetry/feature pipeline as the main run.
+    """
+    if not drivers_tuple:
+        return None
+    telemetry_data, _skipped = fetch_raw_telemetry_cached(year, grand_prix, session_type, drivers_tuple)
+    if not telemetry_data:
+        return None
+    df = build_features_cached(
+        telemetry_data,
+        sector_definitions_tuple,
+        year,
+        grand_prix,
+        session_type,
+        sector_mode,
+    )
+    if df is None or df.empty:
+        return None
+    try:
+        return aggregate_driver_profiles(df)
+    except ValueError:
+        return None
 
 
 def prepare_ml_features(df, feature_columns):
@@ -2002,7 +2046,15 @@ def render_overview(df, analysis_config, skipped_drivers, last_load_time_sec):
 
     st.markdown("**Top 3 drivers**")
     podium_metric_labels = list(PODIUM_METRICS.keys())
-    selector_col, _ = st.columns([1, 2])
+    scope_col, selector_col = st.columns([1, 1])
+    with scope_col:
+        podium_scope = st.selectbox(
+            "Podium scope",
+            options=["All available session drivers", "Selected analysis drivers"],
+            index=0,
+            key="overview_podium_scope",
+            help="Rank every driver with telemetry in this session, or only the drivers selected in the sidebar.",
+        )
     with selector_col:
         podium_metric_label = st.selectbox(
             "Ranking metric",
@@ -2013,16 +2065,65 @@ def render_overview(df, analysis_config, skipped_drivers, last_load_time_sec):
         )
     podium_metric = PODIUM_METRICS[podium_metric_label]
 
-    podium_driver_profile_df = st.session_state.get("driver_profile_df")
-    if not isinstance(podium_driver_profile_df, pd.DataFrame) or podium_driver_profile_df.empty:
+    selected_driver_profile_df = st.session_state.get("driver_profile_df")
+    if not isinstance(selected_driver_profile_df, pd.DataFrame) or selected_driver_profile_df.empty:
         try:
-            podium_driver_profile_df = aggregate_driver_profiles(df)
+            selected_driver_profile_df = aggregate_driver_profiles(df)
         except ValueError:
-            podium_driver_profile_df = None
+            selected_driver_profile_df = None
         else:
-            st.session_state["driver_profile_df"] = podium_driver_profile_df
+            st.session_state["driver_profile_df"] = selected_driver_profile_df
 
-    render_driver_podium(podium_driver_profile_df, metric=podium_metric, title="Top 3 Drivers")
+    podium_title = "Top 3 Among Selected Drivers"
+    podium_scope_note = "Rankings compare only the drivers selected in the sidebar."
+    podium_driver_profile_df = selected_driver_profile_df
+
+    if podium_scope == "All available session drivers":
+        full_session_metadata = get_processed_session_metadata_cached(
+            analysis_config["year"], analysis_config["grand_prix"], analysis_config["session_type"]
+        )
+        if not full_session_metadata["available"] or not full_session_metadata["drivers"]:
+            st.info(
+                "Full-session driver data is not available for this configuration. "
+                "Showing the selected-driver podium instead."
+            )
+        else:
+            full_sector_definitions_tuple = tuple(
+                (
+                    sector.get("Sector_Name", "Selected sector"),
+                    sector.get("Sector_Start"),
+                    sector.get("Sector_End"),
+                )
+                for sector in (analysis_config.get("sector_definitions") or [])
+            )
+            full_session_driver_profile_df = get_full_session_driver_profile_cached(
+                analysis_config["year"],
+                analysis_config["grand_prix"],
+                analysis_config["session_type"],
+                tuple(sorted(full_session_metadata["drivers"])),
+                full_sector_definitions_tuple,
+                analysis_config.get("sector_mode", "Single sector"),
+            )
+            if full_session_driver_profile_df is None or full_session_driver_profile_df.empty:
+                st.info(
+                    "Full-session driver profiles could not be built for this configuration. "
+                    "Showing the selected-driver podium instead."
+                )
+            else:
+                podium_driver_profile_df = full_session_driver_profile_df
+                podium_title = "Top 3 Drivers — Full Session"
+                podium_scope_note = (
+                    "Rankings compare all drivers with valid telemetry in the selected "
+                    "session and distance window."
+                )
+
+    session_label = session_display_map.get(analysis_config["session_type"], analysis_config["session_type"])
+    st.caption(
+        f"Metric: {podium_metric_label} | {analysis_config['grand_prix']} {session_label} {analysis_config['year']} | "
+        f"Window: {analysis_config.get('start_distance')}-{analysis_config.get('end_distance')} m"
+    )
+    render_driver_podium(podium_driver_profile_df, metric=podium_metric, title=podium_title)
+    st.caption(podium_scope_note)
     info_note(
         "The podium ranks drivers only within the selected telemetry window and metric. "
         "It represents segment-specific driving behavior, not an overall assessment of driver performance."
@@ -2790,12 +2891,58 @@ selected_session_label = st.sidebar.selectbox(
     key="selected_session_config",
 )
 selected_session = SESSION_VALUES[SESSION_LABELS.index(selected_session_label)]
-selected_drivers_config = st.sidebar.multiselect(
-    "Driver Selection",
-    options=DEFAULT_DRIVERS,
-    default=DEFAULT_DRIVERS[:10],
-    key="selected_drivers_config",
+
+session_metadata = get_processed_session_metadata_cached(selected_year, selected_gp, selected_session)
+available_drivers = session_metadata["drivers"]
+driver_ranges = session_metadata["driver_ranges"]
+
+MIN_REQUIRED_DRIVERS = 2
+
+_driver_session_key = (selected_year, selected_gp, selected_session)
+if st.session_state.get("_driver_selector_session_key") != _driver_session_key:
+    _current_driver_selection = st.session_state.get("selected_drivers_config", [])
+    _valid_driver_selection = [d for d in _current_driver_selection if d in available_drivers]
+    if not _valid_driver_selection and available_drivers:
+        _valid_driver_selection = available_drivers[:10]
+    st.session_state["selected_drivers_config"] = _valid_driver_selection
+    st.session_state["_driver_selector_session_key"] = _driver_session_key
+
+if not session_metadata["available"] or not available_drivers:
+    st.sidebar.warning(
+        f"No processed telemetry session is available for {selected_gp} "
+        f"{selected_session_label} {selected_year}. Select a different year, "
+        "Grand Prix, or session."
+    )
+    selected_drivers_config = st.sidebar.multiselect(
+        "Driver Selection",
+        options=[],
+        key="selected_drivers_config",
+        disabled=True,
+        help="No drivers available for this session.",
+    )
+else:
+    selected_drivers_config = st.sidebar.multiselect(
+        "Driver Selection",
+        options=available_drivers,
+        key="selected_drivers_config",
+        help=f"{len(available_drivers)} driver(s) have telemetry for this session.",
+    )
+
+selected_driver_ranges = {
+    d: driver_ranges[d] for d in selected_drivers_config if d in driver_ranges
+}
+if selected_driver_ranges:
+    common_min_distance = max(r["min"] for r in selected_driver_ranges.values())
+    common_max_distance = min(r["max"] for r in selected_driver_ranges.values())
+else:
+    common_min_distance = None
+    common_max_distance = None
+common_range_available = (
+    common_min_distance is not None
+    and common_max_distance is not None
+    and common_min_distance < common_max_distance
 )
+
 selected_lap_mode = st.sidebar.radio(
     "Lap mode",
     options=["Fastest lap only", "Top 5 laps consistency"],
@@ -2819,22 +2966,55 @@ selected_start_distance = DEFAULT_START_DISTANCE
 selected_end_distance = DEFAULT_END_DISTANCE
 
 if selected_sector_mode == "Single sector":
-    selected_start_distance = st.sidebar.number_input(
-        "Micro-sector start distance (m)",
-        min_value=0,
-        max_value=7000,
-        value=DEFAULT_START_DISTANCE,
-        step=50,
-        key="selected_start_distance_config",
-    )
-    selected_end_distance = st.sidebar.number_input(
-        "Micro-sector end distance (m)",
-        min_value=0,
-        max_value=7000,
-        value=DEFAULT_END_DISTANCE,
-        step=50,
-        key="selected_end_distance_config",
-    )
+    if not common_range_available:
+        st.sidebar.info(
+            "No common telemetry range is available for the selected drivers and "
+            "session. Choose a different driver set, Grand Prix, or session."
+        )
+        selected_start_distance = DEFAULT_START_DISTANCE
+        selected_end_distance = DEFAULT_END_DISTANCE
+    else:
+        common_min_int = int(common_min_distance)
+        common_max_int = int(common_max_distance)
+
+        margin = max(10, int((common_max_int - common_min_int) * 0.05))
+        default_start = min(common_min_int + margin, common_max_int)
+        default_end = min(default_start + 300, common_max_int)
+        if default_end <= default_start:
+            default_start = common_min_int
+            default_end = common_max_int
+
+        stored_range = st.session_state.get("selected_distance_range_config")
+        stored_range_valid = (
+            isinstance(stored_range, (tuple, list))
+            and len(stored_range) == 2
+            and common_min_int <= stored_range[0] < stored_range[1] <= common_max_int
+        )
+        if not stored_range_valid:
+            st.session_state["selected_distance_range_config"] = (default_start, default_end)
+
+        distance_step = min(25, max(1, common_max_int - common_min_int))
+        selected_start_distance, selected_end_distance = st.sidebar.slider(
+            "Micro-sector distance range (m)",
+            min_value=common_min_int,
+            max_value=common_max_int,
+            step=distance_step,
+            key="selected_distance_range_config",
+        )
+
+        st.sidebar.caption(
+            f"Common range for selected drivers: {common_min_int}–{common_max_int} m"
+        )
+        if (
+            session_metadata["overall_min_distance"] is not None
+            and session_metadata["overall_max_distance"] is not None
+        ):
+            st.sidebar.caption(
+                "Full session telemetry range: "
+                f"{int(session_metadata['overall_min_distance'])}"
+                f"–{int(session_metadata['overall_max_distance'])} m"
+            )
+
     sector_definitions = [
         {
             "Sector_Name": "Selected sector",
@@ -2955,7 +3135,36 @@ if isinstance(_existing_driver_profile_df, pd.DataFrame) and not _existing_drive
             f"{_valid_profile_count_hint} valid driver profiles are available."
         )
 
-if st.sidebar.button("Run Micro-Sector Analysis", type="primary", use_container_width=True):
+run_block_reasons = []
+if not session_metadata["available"] or not available_drivers:
+    run_block_reasons.append("No processed telemetry session is available for this configuration.")
+if not selected_drivers_config:
+    run_block_reasons.append("Select at least one driver.")
+elif len(selected_drivers_config) < MIN_REQUIRED_DRIVERS:
+    run_block_reasons.append(f"Select at least {MIN_REQUIRED_DRIVERS} drivers to run analysis.")
+if selected_sector_mode == "Single sector":
+    if not common_range_available:
+        run_block_reasons.append("No common telemetry range exists for the selected drivers.")
+    else:
+        common_min_int = int(common_min_distance)
+        common_max_int = int(common_max_distance)
+        if not (common_min_int <= selected_start_distance <= common_max_int):
+            run_block_reasons.append("Start distance is outside the valid common range.")
+        elif not (common_min_int <= selected_end_distance <= common_max_int):
+            run_block_reasons.append("End distance is outside the valid common range.")
+        elif selected_end_distance <= selected_start_distance:
+            run_block_reasons.append("End distance must be greater than start distance.")
+
+run_disabled = bool(run_block_reasons)
+if run_block_reasons:
+    st.sidebar.caption(f"⚠ {run_block_reasons[0]}")
+
+if st.sidebar.button(
+    "Run Micro-Sector Analysis",
+    type="primary",
+    use_container_width=True,
+    disabled=run_disabled,
+):
     if not selected_drivers_config:
         st.sidebar.warning("Select at least one driver before running analysis.")
     else:

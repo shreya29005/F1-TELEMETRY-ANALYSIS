@@ -16,7 +16,7 @@ def _processed_path(year, grand_prix, session_type):
     return os.path.join(PROCESSED_DIR, f"{year}_{safe_gp}_{session_type}.parquet")
 
 
-def _load_processed_telemetry(year, grand_prix, session_type):
+def _find_processed_path(year, grand_prix, session_type):
     if not os.path.exists(PROCESSED_DIR):
         return None
     gp_key = grand_prix.lower().replace(" ", "_").replace("grand_prix", "").strip("_")
@@ -33,8 +33,70 @@ def _load_processed_telemetry(year, grand_prix, session_type):
             continue
         file_gp_key = file_event_slug.lower().replace("grand_prix", "").strip("_")
         if gp_key in file_gp_key or file_gp_key in gp_key:
-            return pd.read_parquet(os.path.join(PROCESSED_DIR, fname))
+            return os.path.join(PROCESSED_DIR, fname)
     return None
+
+
+def _load_processed_telemetry(year, grand_prix, session_type):
+    path = _find_processed_path(year, grand_prix, session_type)
+    if path is None:
+        return None
+    return pd.read_parquet(path)
+
+
+_EMPTY_SESSION_METADATA = {
+    "available": False,
+    "drivers": [],
+    "overall_min_distance": None,
+    "overall_max_distance": None,
+    "driver_ranges": {},
+}
+
+
+def get_processed_session_metadata(year, grand_prix, session_type):
+    """Lightweight metadata (available drivers + telemetry distance ranges) for a
+    processed session, without loading the full telemetry columns.
+    """
+    path = _find_processed_path(year, grand_prix, session_type)
+    if path is None:
+        return dict(_EMPTY_SESSION_METADATA)
+
+    try:
+        meta_df = pd.read_parquet(path, columns=["Driver", "Distance", "LapRank"])
+    except Exception:
+        try:
+            meta_df = pd.read_parquet(path)
+        except Exception as exc:
+            logger.warning(f"Failed to read processed session metadata from {path}: {exc}")
+            return dict(_EMPTY_SESSION_METADATA)
+
+    if "Driver" not in meta_df.columns or "Distance" not in meta_df.columns:
+        return dict(_EMPTY_SESSION_METADATA)
+
+    if "LapRank" in meta_df.columns:
+        meta_df = meta_df[meta_df["LapRank"] == 1]
+
+    meta_df = meta_df[["Driver", "Distance"]].copy()
+    meta_df["Distance"] = pd.to_numeric(meta_df["Distance"], errors="coerce")
+    meta_df = meta_df.dropna(subset=["Driver", "Distance"])
+
+    if meta_df.empty:
+        return dict(_EMPTY_SESSION_METADATA)
+
+    driver_ranges = {
+        driver_code: {"min": float(group["Distance"].min()), "max": float(group["Distance"].max())}
+        for driver_code, group in meta_df.groupby("Driver")
+    }
+    if not driver_ranges:
+        return dict(_EMPTY_SESSION_METADATA)
+
+    return {
+        "available": True,
+        "drivers": sorted(driver_ranges.keys()),
+        "overall_min_distance": float(meta_df["Distance"].min()),
+        "overall_max_distance": float(meta_df["Distance"].max()),
+        "driver_ranges": driver_ranges,
+    }
 def enable_fastf1_cache(cache_dir="cache"):
     global _CACHE_ENABLED
     if _CACHE_ENABLED:
