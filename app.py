@@ -16,6 +16,7 @@ import time
 import html
 import logging
 import re
+import textwrap
 import unicodedata
 from data_fetch import fetch_driver_telemetry, fetch_driver_top5_telemetry, enable_fastf1_cache
 from feature_engg import build_feature_dataset, extract_turn_features
@@ -1900,29 +1901,33 @@ def render_driver_podium(driver_profile_df, metric="Corner_Aggression_Score", ti
         driver_code = html.escape(str(entry["Driver"]))
         value_display = html.escape(format_podium_metric_value(metric, entry[metric]))
         leader_badge = '<div class="podium-leader-badge">Leader</div>' if is_leader else ""
-        return f"""
+        return textwrap.dedent(f"""\
             <div class="podium-place {place_modifier}">
                 <div class="podium-rank">{rank}</div>
                 <div class="podium-driver">{driver_code}</div>
                 <div class="podium-value">{value_display}</div>
-                {leader_badge}
-                <div class="podium-block"></div>
+                {leader_badge}<div class="podium-block"></div>
             </div>
-        """
+        """).strip()
 
-    podium_html = f"""
-    <div class="podium-wrapper">
-        <div class="podium-header">
-            <span class="podium-header__title">{html.escape(title)}</span>
-            <span class="podium-header__metric">Ranked by {html.escape(prettify_label(metric))}</span>
+    podium_html = textwrap.dedent(f"""\
+        <div class="podium-wrapper">
+            <div class="podium-header">
+                <span class="podium-header__title">{html.escape(title)}</span>
+                <span class="podium-header__metric">Ranked by {html.escape(prettify_label(metric))}</span>
+            </div>
+            <div class="podium-grid">
+                {render_place(2, "podium-place--second", second_entry)}
+                {render_place(1, "podium-place--first", first_entry, is_leader=True)}
+                {render_place(3, "podium-place--third", third_entry)}
+            </div>
         </div>
-        <div class="podium-grid">
-            {render_place(2, "podium-place--second", second_entry)}
-            {render_place(1, "podium-place--first", first_entry, is_leader=True)}
-            {render_place(3, "podium-place--third", third_entry)}
-        </div>
-    </div>
-    """
+    """).strip()
+    # Fragments inserted above carry their own indentation from render_place(),
+    # which throws off dedent()'s common-prefix calculation for the outer
+    # template. Flatten every line to column zero so no line can ever be
+    # mistaken for an indented Markdown code block.
+    podium_html = "\n".join(line.lstrip() for line in podium_html.splitlines())
     st.markdown(podium_html, unsafe_allow_html=True)
 
 
